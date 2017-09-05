@@ -1,0 +1,112 @@
+#!/usr/bin/python
+
+import sys
+import getopt
+import base64
+import hashlib
+import urllib, json
+from Crypto import Random
+from Crypto.Cipher import AES
+
+
+class AESCipher(object):
+
+  def __init__(self, key): 
+    self.bs = 32
+    self.key = hashlib.sha256(key.encode()).digest()
+
+  def encrypt(self, raw):
+    raw = self._pad(raw)
+    iv = Random.new().read(AES.block_size)
+    cipher = AES.new(self.key, AES.MODE_CBC, iv)
+    return base64.b64encode(iv + cipher.encrypt(raw))
+
+  def decrypt(self, enc):
+    enc = base64.b64decode(enc)
+    iv = enc[:AES.block_size]
+    cipher = AES.new(self.key, AES.MODE_CBC, iv)
+    return self._unpad(cipher.decrypt(enc[AES.block_size:])).decode('utf-8')
+
+  def _pad(self, s):
+    return s + (self.bs - len(s) % self.bs) * chr(self.bs - len(s) % self.bs)
+
+  @staticmethod
+  def _unpad(s):
+    return s[:-ord(s[len(s)-1:])]
+
+
+def copy_from_stdin(enc=None):
+  data = None
+  try:
+    data = enc.encrypt(sys.stdin.read())
+  except KeyboardInterrupt:
+    sys.exit(1)
+  return data
+
+
+def usage_options():
+  WHITE = '\033[1m'
+  RESET = '\033[0m'
+  print ''
+  print '\t{0}cpit:{1} '.format(WHITE, RESET)
+  print ''
+  sys.exit(1)
+
+
+def establish_logger(level=False):
+  logging.basicConfig(format='[%(asctime)s] [%(levelname)s]: %(message)s', datefmt='%d/%m/%Y %I:%M:%S')
+  log = logging.getLogger()
+  if level is True:
+      log.setLevel(logging.DEBUG)
+  logging.getLogger('botocore').setLevel(logging.CRITICAL)
+  logging.getLogger('boto3').setLevel(logging.CRITICAL)
+
+  return log
+
+
+def main(argv):
+  paste = None
+  enc = AESCipher('mykey')
+  log = establish_logger(False)
+
+  try:
+    opts, args = getopt.getopt(argv, "?v", ["help", "verbose"])
+  except getopt.GetoptError:
+    usage_options()
+
+  for opt, arg in opts:
+    if opt in ('-?', '--help'):
+      usage_options()
+    elif opt in ('-f', '--file'):
+      filename = arg
+    elif opt in ('-v', '--verbose'):
+      log = establish_logger(False)
+
+  if sys.stdin.isatty() is False:
+    data = copy_from_stdin(enc)
+  else:
+    get_paste()
+
+
+def get_paste(log):
+  try:
+    url = "http://localhost"
+    response = urllib.urlopen(url)
+    data = json.loads(response.read())
+    print data
+  except:
+    print "Could not connect to cpit server"
+   
+
+def send_to_server(enc=None, data=None):
+  url = "localhost"
+  response = urllib.urlopen(url)
+  data = json.loads(response.read())
+  
+  params = {
+  }
+
+
+if __name__ == "__main__":
+  main(sys.argv[1:])
+
