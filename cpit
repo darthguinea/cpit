@@ -2,46 +2,9 @@
 
 import sys
 import getopt
-import base64
-import hashlib
-import urllib, json
-from Crypto import Random
-from Crypto.Cipher import AES
-
-
-class AESCipher(object):
-
-  def __init__(self, key): 
-    self.bs = 32
-    self.key = hashlib.sha256(key.encode()).digest()
-
-  def encrypt(self, raw):
-    raw = self._pad(raw)
-    iv = Random.new().read(AES.block_size)
-    cipher = AES.new(self.key, AES.MODE_CBC, iv)
-    return base64.b64encode(iv + cipher.encrypt(raw))
-
-  def decrypt(self, enc):
-    enc = base64.b64decode(enc)
-    iv = enc[:AES.block_size]
-    cipher = AES.new(self.key, AES.MODE_CBC, iv)
-    return self._unpad(cipher.decrypt(enc[AES.block_size:])).decode('utf-8')
-
-  def _pad(self, s):
-    return s + (self.bs - len(s) % self.bs) * chr(self.bs - len(s) % self.bs)
-
-  @staticmethod
-  def _unpad(s):
-    return s[:-ord(s[len(s)-1:])]
-
-
-def copy_from_stdin(enc=None):
-  data = None
-  try:
-    data = enc.encrypt(sys.stdin.read())
-  except KeyboardInterrupt:
-    sys.exit(1)
-  return data
+import logging
+import json, urllib
+from sjcl import SJCL
 
 
 def usage_options():
@@ -54,19 +17,43 @@ def usage_options():
 
 
 def establish_logger(level=False):
-  logging.basicConfig(format='[%(asctime)s] [%(levelname)s]: %(message)s', datefmt='%d/%m/%Y %I:%M:%S')
-  log = logging.getLogger()
-  if level is True:
-      log.setLevel(logging.DEBUG)
-  logging.getLogger('botocore').setLevel(logging.CRITICAL)
-  logging.getLogger('boto3').setLevel(logging.CRITICAL)
+	logging.basicConfig(format='[%(asctime)s] [%(levelname)s]: %(message)s', datefmt='%d/%m/%Y %I:%M:%S')
+	log = logging.getLogger()
+	if level is True:
+		log.setLevel(logging.DEBUG)
+	else:
+		log.setLevel(logging.FATAL)
+	return log
 
-  return log
+
+def copy_from_stdin():
+  data = None
+  try:
+    data = SJCL().encrypt(sys.stdin.read(), "shared_secret")
+  except KeyboardInterrupt:
+    sys.exit(1)
+  return data
+
+
+def get_paste(log):
+	data = None
+	url = "http://localhost:80"
+
+	log.error('wtf')
+
+	try:
+		response = urllib.urlopen(url)
+		data = json.loads(response.read())
+		return SJCL().decrypt(data, "shared_secret")
+	except IOError:
+		log.error('Could not contact cpit server')
+	except ValueError:
+		log.error('Invalid server response')
+
+	return None
 
 
 def main(argv):
-  paste = None
-  enc = AESCipher('mykey')
   log = establish_logger(False)
 
   try:
@@ -80,31 +67,14 @@ def main(argv):
     elif opt in ('-f', '--file'):
       filename = arg
     elif opt in ('-v', '--verbose'):
-      log = establish_logger(False)
+      log = establish_logger(True)
 
+  # Copy from stdin:
   if sys.stdin.isatty() is False:
-    data = copy_from_stdin(enc)
+    data = copy_from_stdin()
+    log.info(data)
   else:
-    get_paste()
-
-
-def get_paste(log):
-  try:
-    url = "http://localhost"
-    response = urllib.urlopen(url)
-    data = json.loads(response.read())
-    print data
-  except:
-    print "Could not connect to cpit server"
-   
-
-def send_to_server(enc=None, data=None):
-  url = "localhost"
-  response = urllib.urlopen(url)
-  data = json.loads(response.read())
-  
-  params = {
-  }
+    print get_paste(log)
 
 
 if __name__ == "__main__":
