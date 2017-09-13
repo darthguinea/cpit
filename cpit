@@ -2,9 +2,33 @@
 
 import sys
 import getopt
+import random
 import logging
 import json, urllib
 from sjcl import SJCL
+from os.path import expanduser
+
+
+class Config(object):
+  
+  def __init__(self, log, config_file='~/.config/cpit.cfg'):
+    self.config_file = expanduser(config_file)
+
+  
+  def load(self):
+    with open(self.config_file) as json_file:
+      data = json.load(json_file)
+      return data
+
+
+  def save(self, data):
+    with open(self.config_file, 'w') as outfile:
+      json.dump(data, outfile)
+
+
+  def passcode(self, length=32):
+    valid_letters='abcdefghijklmnopqrestuvqxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890'
+    return ''.join((random.choice(valid_letters) for i in xrange(length)))
 
 
 def usage_options():
@@ -26,32 +50,31 @@ def establish_logger(level=False):
 	return log
 
 
-def copy_from_stdin():
+def copy_from_stdin(cfg):
   data = None
   try:
-    data = SJCL().encrypt(sys.stdin.read(), "shared_secret")
+    data = sys.stdin.read()
   except KeyboardInterrupt:
     sys.exit(1)
   return data
 
 
-def get_paste(log):
-	data = None
-	url = "http://localhost:80"
+def send_to_server(log, data):
+	url = "http://localhost"
 
-	log.error('wtf')
 
-	try:
-		response = urllib.urlopen(url)
-		data = json.loads(response.read())
-		return SJCL().decrypt(data, "shared_secret")
-	except IOError:
-		log.error('Could not contact cpit server')
-	except ValueError:
-		log.error('Invalid server response')
+def save_to_file(cfg, data):
+  passcode = cfg.passcode()
+  data = SJCL().encrypt(data, passcode)
+  data['passcode'] = passcode
+  cfg.save(data)
 
-	return None
 
+def get_paste(cfg):
+  data = cfg.load()
+  data = SJCL().decrypt(data, data['passcode'])
+  return data
+  
 
 def main(argv):
   log = establish_logger(False)
@@ -70,11 +93,12 @@ def main(argv):
       log = establish_logger(True)
 
   # Copy from stdin:
+  cfg = Config(log)
   if sys.stdin.isatty() is False:
-    data = copy_from_stdin()
-    log.info(data)
+    data = copy_from_stdin(cfg)
+    data = save_to_file(cfg, data)
   else:
-    print get_paste(log)
+    print get_paste(cfg)
 
 
 if __name__ == "__main__":
