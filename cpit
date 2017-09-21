@@ -51,12 +51,14 @@ def establish_logger(level=False):
 	return log
 
 
-def copy_from_stdin(cfg):
+def copy_from_stdin(log, cfg):
   data = None
   try:
     data = sys.stdin.read()
   except KeyboardInterrupt:
+    log.warn('KeyboardInterrupt called, exiting.')
     sys.exit(1)
+  log.info('Data copied from stdin.')
   return data
 
 
@@ -64,9 +66,10 @@ def send_to_server(log, data):
 	url = "http://localhost"
 
 
-def save_to_file(cfg, data):
+def save_to_file(log, cfg, data):
   passcode = cfg.passcode()
   data = SJCL().encrypt(data, passcode)
+  log.info('Message [{0}]'.format(data))
   data['passcode'] = passcode
   cfg.save(data)
 
@@ -96,9 +99,9 @@ def main(argv):
   # Copy from stdin:
   cfg = Config(log)
   if sys.stdin.isatty() is False:
-    data = copy_from_stdin(cfg)
+    data = copy_from_stdin(log, cfg)
     pyperclip.copy(data)
-    data = save_to_file(cfg, data)
+    data = save_to_file(log, cfg, data)
   else:
     print get_paste(cfg)
 
