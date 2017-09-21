@@ -4,6 +4,7 @@ import sys
 import getopt
 import random
 import logging
+import pyperclip
 import json, urllib
 from sjcl import SJCL
 from os.path import expanduser
@@ -96,6 +97,7 @@ def main(argv):
   cfg = Config(log)
   if sys.stdin.isatty() is False:
     data = copy_from_stdin(cfg)
+    pyperclip.copy(data)
     data = save_to_file(cfg, data)
   else:
     print get_paste(cfg)
